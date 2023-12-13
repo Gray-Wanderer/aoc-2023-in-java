@@ -1,9 +1,11 @@
 package andrei.mishunin.aoc2023.day13;
 
 import andrei.mishunin.aoc2023.tools.InputReader;
+import andrei.mishunin.aoc2023.tools.MatrixUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToIntFunction;
 
 public class MirrorSearcher {
     List<char[][]> patterns = new ArrayList<>();
@@ -11,14 +13,12 @@ public class MirrorSearcher {
     public MirrorSearcher(String file) {
         List<String> input = InputReader.readAllLines(file);
 
-
         List<String> pattern = new ArrayList<>();
-        for (int i = 0; i < input.size(); i++) {
-            String line = input.get(i);
+        for (String line : input) {
             if (line.isBlank()) {
                 patterns.add(pattern.stream()
-                        .map(String::toCharArray)
-                        .toArray(char[][]::new)
+                                     .map(String::toCharArray)
+                                     .toArray(char[][]::new)
                 );
                 pattern.clear();
             } else {
@@ -27,116 +27,94 @@ public class MirrorSearcher {
         }
         if (!pattern.isEmpty()) {
             patterns.add(pattern.stream()
-                    .map(String::toCharArray)
-                    .toArray(char[][]::new)
+                                 .map(String::toCharArray)
+                                 .toArray(char[][]::new)
             );
         }
     }
 
     public int getMirrorSum() {
         return patterns.stream()
-                .mapToInt(this::searchMirrors)
+                .mapToInt(pattern -> this.searchMirrors(pattern, this::searchMirror))
                 .sum();
     }
 
-    private int searchMirrors(char[][] pattern) {
-        String[] horisontal = new String[pattern.length];
-        for (int i = 0; i < pattern.length; i++) {
-            horisontal[i] = new String(pattern[i]);
+    private int searchMirrors(char[][] pattern, ToIntFunction<char[][]> mirrorSearcher) {
+        int mirrorH = mirrorSearcher.applyAsInt(pattern);
+        if (mirrorH > 0) {
+            return mirrorH * 100;
         }
-        int mirrorH = 100 * searchMirror(horisontal);
-
-//        int n = pattern[0].length;
-//        String[] vertical = new String[n];
-//        for (int j = 0; j < n; j++) {
-//            char[] r = new char[pattern.length];
-//            for (int i = 0; i < pattern.length; i++) {
-//                r[i] = pattern[i][j];
-//            }
-//            vertical[j] = new String(r);
-//        }
-
-        int n = pattern.length;
-        int m = pattern[0].length;
-        char[][] transposed = new char[m][n];
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < m; j++) {
-                transposed[j][i] = pattern[i][j];
-            }
-        }
-
-        String[] vertical = new String[transposed.length];
-        for (int i = 0; i < transposed.length; i++) {
-            vertical[i] = new String(transposed[i]);
-        }
-
-        int mirrorV = searchMirror(vertical);
-        return mirrorH + mirrorV;
+        return mirrorSearcher.applyAsInt(MatrixUtils.transpose(pattern));
     }
 
-    private int searchMirror(String[] values) {
-        int r = searchMirrorR(values);
-        int sizeR = values.length - r;
-        int l = searchMirrorL(values);
-        int sizeL = l;
-        if (r == 0 && l == 0) {
-            return 0;
-        }
-        if (r != 0 && l != 0) {
-            if (sizeR > sizeL) {
-                return r;
-            } else {
-                return l;
+    private int searchMirror(char[][] values) {
+        for (int i = 1; i < values.length; i++) {
+            int r = i - 1;
+            int l = i;
+            boolean equals = true;
+            while (r >= 0 && l < values.length && equals) {
+                for (int j = 0; j < values[r].length; j++) {
+                    if (values[r][j] != values[l][j]) {
+                        equals = false;
+                        break;
+                    }
+                }
+                if (equals) {
+                    r--;
+                    l++;
+                }
             }
-        } else {
-            return l != 0 ? l : r;
-        }
-    }
-
-    private int searchMirrorR(String[] values) {
-        for (int i = 0; i < values.length - 2; i++) {
-            int r = i;
-            int l = values.length - 1;
-            while (r < l && values[r].equals(values[l])) {
-                r++;
-                l--;
-            }
-            if (r > l) {
-                //.. middle .. l,r ...
-//                Arrays.stream(values).forEach(System.out::println);
-//                System.out.println(r);
-//                System.out.println();
-                return r;
+            if (equals) {
+                return r + (l - r) / 2 + 1;
             }
         }
         return 0;
     }
 
-    private int searchMirrorL(String[] values) {
-        for (int i = values.length - 1; i > 0; i--) {
-            int r = 0;
+    public int getDirtyMirrorSum() {
+        return patterns.stream()
+                .mapToInt(pattern -> this.searchMirrors(pattern, this::searchDirtyMirror))
+                .sum();
+    }
+
+    private int searchDirtyMirror(char[][] values) {
+        for (int i = 1; i < values.length; i++) {
+            int r = i - 1;
             int l = i;
-            while (r < l && values[r].equals(values[l])) {
-                r++;
-                l--;
+            boolean equals = true;
+            int errorIndex = -1;
+            while (r >= 0 && l < values.length && equals) {
+                for (int j = 0; j < values[r].length; j++) {
+                    if (values[r][j] != values[l][j]) {
+                        if (errorIndex < 0) {
+                            errorIndex = j;
+                        } else if (errorIndex != j) {
+                            equals = false;
+                            break;
+                        }
+                    }
+                }
+                if (equals) {
+                    r--;
+                    l++;
+                }
             }
-            if (r > l) {
-                //.. l,r ... middle
-                return r;
+            if (equals && errorIndex >= 0) {
+                return r + (l - r) / 2 + 1;
             }
         }
         return 0;
     }
 
     public static void main(String[] args) {
-//        System.out.println("== TEST 1 ==");
-//        System.out.println(new MirrorSearcher("day13/test.txt").getMirrorSum());
-        //38100
-        //38152
-        //36706
-        //19638
-        //25906
+        System.out.println("== TEST 1 ==");
+        System.out.println(new MirrorSearcher("day13/test.txt").getMirrorSum());
         System.out.println("== SOLUTION 1 ==");
         System.out.println(new MirrorSearcher("day13/input.txt").getMirrorSum());
+
+        System.out.println("== TEST 1 ==");
+        System.out.println(new MirrorSearcher("day13/test.txt").getDirtyMirrorSum());
+        System.out.println("== SOLUTION 2 ==");
+        System.out.println(new MirrorSearcher("day13/input.txt").getDirtyMirrorSum());
     }
 }
