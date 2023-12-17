@@ -72,4 +72,27 @@ public class MatrixUtils {
         transposeSquared(matrix);
         swapColumns(matrix);
     }
+
+    public static int sumCells(int[][] matrix, int i1, int j1, int i2, int j2) {
+        int startI = Math.min(i1, i2);
+        int startJ = Math.min(j1, j2);
+        int endI = Math.max(i1, i2);
+        int endJ = Math.max(j1, j2);
+
+        int sum = 0;
+        for (int i = startI; i <= endI; i++) {
+            for (int j = startJ; j <= endJ; j++) {
+                sum += matrix[i][j];
+            }
+        }
+        return sum;
+    }
+
+    public static int compareManhattanDistance(IntPair p1, IntPair p2) {
+        return p1.i() - p2.i() + p1.j() - p2.j();
+    }
+
+    public static int getManhattanDistance(int i, int j, int i2, int j2) {
+        return Math.abs(i2 - i) + Math.abs(j2 - j);
+    }
 }
