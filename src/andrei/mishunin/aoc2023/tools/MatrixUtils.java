@@ -28,6 +28,10 @@ public class MatrixUtils {
         return i >= 0 && i < matrix.length && j >= 0 && j < matrix[0].length;
     }
 
+    public static boolean isIndexInMatrix(boolean[][] matrix, int i, int j) {
+        return i >= 0 && i < matrix.length && j >= 0 && j < matrix[0].length;
+    }
+
     public static char[][] transpose(char[][] matrix) {
         int n = matrix.length;
         int m = matrix[0].length;
