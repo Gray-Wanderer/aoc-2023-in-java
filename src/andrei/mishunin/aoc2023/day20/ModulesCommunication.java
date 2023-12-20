@@ -1,14 +1,19 @@
 package andrei.mishunin.aoc2023.day20;
 
 import andrei.mishunin.aoc2023.tools.InputReader;
+import andrei.mishunin.aoc2023.tools.MyMath;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 
-public class ModulesComunication {
+public class ModulesCommunication {
     private static final String BROADCAST_ID = "broadcaster";
     private static final String FINAL_MACHINE_ID = "rx";
     Map<String, Module> modules = new HashMap<>();
@@ -16,11 +21,13 @@ public class ModulesComunication {
     long lowPulses = 0;
     long highPulses = 0;
 
-    public ModulesComunication(String fileName) {
+    public ModulesCommunication(String fileName) {
         finalMachine = new FinalMachine();
         modules.put(FINAL_MACHINE_ID, finalMachine);
 
-        InputReader.readAllLines(fileName).forEach(this::parseInputLine);
+        InputReader.readAllLines(fileName).stream()
+                .filter(s -> !s.isBlank())
+                .forEach(this::parseInputLine);
 
         for (Module module : new ArrayList<>(modules.values())) {
             for (String destination : module.getDestinations()) {
@@ -52,11 +59,49 @@ public class ModulesComunication {
         }
     }
 
-    public long pressTheButtonUntilFinalMachineIsOff() {
+    public long findClicksCountToTurnOnFinalMachine() {
+        int i = 0;
+        Map<String, FinalMachine> coreToFinal = new HashMap<>();
+        if (finalMachine.getSources().size() > 1) {
+            throw new RuntimeException();
+        }
+        Module accumulator = modules.get(finalMachine.getSources().iterator().next());
+        for (String source : accumulator.getSources()) {
+            Module inverter = modules.get(source);
+            String cycleCore = inverter.getSources().iterator().next();
+            FinalMachine machine = new FinalMachine(Integer.toString(i));
+            modules.get(cycleCore).addDestinations(machine.getId());
+            machine.addInput(cycleCore);
+            coreToFinal.put(cycleCore, machine);
+            modules.put(machine.getId(), machine);
+            i++;
+        }
+
+        long combinations = 1;
+        for (String startId : modules.get(BROADCAST_ID).getDestinations()) {
+            Module start = modules.get(startId);
+            if (start.getDestinations().size() > 2) {
+                throw new RuntimeException();
+            }
+            String cycleCore = null;
+            for (String startDestination : start.getDestinations()) {
+                if (modules.get(startDestination) instanceof Conjunction) {
+                    cycleCore = startDestination;
+                    break;
+                }
+            }
+
+            long cycle = pressTheButtonUntilMachineIsOff(startId, coreToFinal.get(cycleCore));
+            combinations = MyMath.getLeastCommonMultiple(combinations, cycle);
+        }
+        return combinations;
+    }
+
+    private long pressTheButtonUntilMachineIsOff(String enterId, FinalMachine finalModule) {
         var signalQueue = new ArrayDeque<Signal>();
         long pressCount = 0;
-        while (finalMachine.isOff()) {
-            pressTheButton(signalQueue);
+        while (finalModule.isOff() && pressCount >= 0) {
+            pressTheButton(signalQueue, enterId);
             pressCount++;
         }
         return pressCount;
@@ -65,14 +110,14 @@ public class ModulesComunication {
     public long pressTheButtonAndCountSignals(int pressCount) {
         var signalQueue = new ArrayDeque<Signal>();
         for (int i = 0; i < pressCount; i++) {
-            pressTheButton(signalQueue);
+            pressTheButton(signalQueue, BROADCAST_ID);
         }
         return lowPulses * highPulses;
     }
 
-    private void pressTheButton(Queue<Signal> signalQueue) {
+    private void pressTheButton(Queue<Signal> signalQueue, String broadcastId) {
         signalQueue.clear();
-        signalQueue.add(new Signal("button", BROADCAST_ID, -1));
+        signalQueue.add(new Signal("button", broadcastId, -1));
         while (!signalQueue.isEmpty()) {
             Signal signal = signalQueue.poll();
             if (signal.pulse == -1) {
@@ -86,15 +131,16 @@ public class ModulesComunication {
 
     public static void main(String[] args) {
         System.out.println("== TEST 1 ==");
-        //32000000
-        System.out.println(new ModulesComunication("day20/test.txt").pressTheButtonAndCountSignals(1000));
-        //11687500
-        System.out.println(new ModulesComunication("day20/test2.txt").pressTheButtonAndCountSignals(1000));
+        System.out.println(new ModulesCommunication("day20/test.txt").pressTheButtonAndCountSignals(1000));
+        System.out.println(new ModulesCommunication("day20/test2.txt").pressTheButtonAndCountSignals(1000));
         System.out.println("== SOLUTION 1 ==");
-        System.out.println(new ModulesComunication("day20/input.txt").pressTheButtonAndCountSignals(1000));
+        System.out.println(new ModulesCommunication("day20/input.txt").pressTheButtonAndCountSignals(1000));
 
+        System.out.println("== TEST 2 ==");
+        System.out.println(new ModulesCommunication("day20/test3.txt").findClicksCountToTurnOnFinalMachine());
+        System.out.println(new ModulesCommunication("day20/test4.txt").findClicksCountToTurnOnFinalMachine());
         System.out.println("== SOLUTION 2 ==");
-        System.out.println(new ModulesComunication("day20/input.txt").pressTheButtonUntilFinalMachineIsOff());
+        System.out.println(new ModulesCommunication("day20/input.txt").findClicksCountToTurnOnFinalMachine());
     }
 
     private record Signal(String from, String to, int pulse) {
@@ -105,19 +151,24 @@ public class ModulesComunication {
 
         String getId();
 
-        String[] getDestinations();
+        List<String> getDestinations();
+
+        void addDestinations(String d);
+
+        Set<String> getSources();
 
         default void addInput(String string) {
         }
     }
 
-    private abstract class AbstractModule implements Module {
+    private static abstract class AbstractModule implements Module {
         final String id;
-        final String[] destinations;
+        final List<String> destinations;
+        final Set<String> sources = new HashSet<>();
 
         public AbstractModule(String id, String[] destinations) {
             this.id = id;
-            this.destinations = destinations;
+            this.destinations = new ArrayList<>(Arrays.asList(destinations));
         }
 
         @Override
@@ -126,8 +177,22 @@ public class ModulesComunication {
         }
 
         @Override
-        public String[] getDestinations() {
+        public List<String> getDestinations() {
             return destinations;
+        }
+
+        @Override
+        public void addDestinations(String d) {
+            destinations.add(d);
+        }
+
+        @Override
+        public void addInput(String string) {
+            sources.add(string);
+        }
+
+        public Set<String> getSources() {
+            return sources;
         }
 
         protected void broadcast(Queue<Signal> signalQueue, int pulse) {
@@ -137,7 +202,7 @@ public class ModulesComunication {
         }
     }
 
-    private class Stuff extends AbstractModule {
+    private static class Stuff extends AbstractModule {
         public Stuff(String id) {
             super(id, new String[]{});
         }
@@ -147,12 +212,16 @@ public class ModulesComunication {
         }
     }
 
-    private class FinalMachine extends AbstractModule {
+    private static class FinalMachine extends AbstractModule {
         boolean off;
 
         public FinalMachine() {
-            super(FINAL_MACHINE_ID, new String[]{});
-            off = true;
+            this(FINAL_MACHINE_ID);
+        }
+
+        public FinalMachine(String id) {
+            super(id, new String[]{});
+            this.off = true;
         }
 
         @Override
@@ -167,7 +236,7 @@ public class ModulesComunication {
         }
     }
 
-    private class Broadcast extends AbstractModule {
+    private static class Broadcast extends AbstractModule {
         public Broadcast(String[] destinations) {
             super(BROADCAST_ID, destinations);
         }
@@ -180,7 +249,7 @@ public class ModulesComunication {
         }
     }
 
-    private class Conjunction extends AbstractModule {
+    private static class Conjunction extends AbstractModule {
         final Map<String, Integer> receivedPulses = new HashMap<>();
         int highPulses = 0;
 
@@ -191,6 +260,7 @@ public class ModulesComunication {
 
         @Override
         public void addInput(String string) {
+            super.addInput(string);
             receivedPulses.put(string, -1);
         }
 
@@ -209,7 +279,7 @@ public class ModulesComunication {
         }
     }
 
-    private class FlipFlop extends AbstractModule {
+    private static class FlipFlop extends AbstractModule {
         boolean on;
 
         public FlipFlop(String id, String[] destinations) {
