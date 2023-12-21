@@ -4,6 +4,7 @@ import andrei.mishunin.aoc2023.tools.InputReader;
 import andrei.mishunin.aoc2023.tools.IntPair;
 import andrei.mishunin.aoc2023.tools.MatrixUtils;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -60,31 +61,76 @@ public class StepCounter {
         }
     }
 
-    public int countInfinityGardenPlotsForSteps(int steps) {
-        int[] cycle = findCycle();
-        System.out.println("Cycle: " + cycle[0] + " " + cycle[1]);
+    public long countInfinityGardenPlotsForSteps(int steps) {
+        CycleAndSteps cycle = findCycle();
 
-        Map<IntPair, Set<IntPair>> routeByMaps = new HashMap<>();
-        routeByMaps.computeIfAbsent(new IntPair(0, 0), k -> new HashSet<>()).add(startPosition);
         int[] cycleCount = new int[2];
+        Map<IntPair, Set<IntPair>> routeByMaps = fillRoutesMapAndCycles(cycle, steps, cycleCount);
+
+        long sum = 0;
+        for (var uniqueGardens : routeByMaps.values()) {
+            sum += uniqueGardens.size();
+        }
+
+        if (steps % 2 == 0) {
+            sum += cycleCount[0] * cycle.evenCycle + cycleCount[1] * cycle.oddCycle;
+        } else {
+            sum += cycleCount[0] * cycle.oddCycle + cycleCount[1] * cycle.evenCycle;
+        }
+        return sum;
+    }
+
+    private Map<IntPair, Set<IntPair>> fillRoutesMapAndCycles(CycleAndSteps cycle, int steps, int[] cycleCount) {
+        Map<IntPair, Set<IntPair>> routeByMaps = new HashMap<>();
+        Set<IntPair> blocked = new HashSet<>();
+        Set<IntPair> cycleCandidate = new HashSet<>();
+        routeByMaps.computeIfAbsent(new IntPair(0, 0), k -> new HashSet<>()).add(startPosition);
         int stepCount = 0;
         while (!routeByMaps.isEmpty() && stepCount < steps) {
             Map<IntPair, Set<IntPair>> next = new HashMap<>();
-            for (IntPair step : routeByMaps) {
-                doStep(next, step);
+            for (IntPair map : routeByMaps.keySet()) {
+                for (IntPair step : routeByMaps.get(map)) {
+                    doStepInInfinityMap(next, blocked, map, step);
+                }
             }
             stepCount++;
             routeByMaps = next;
-        }
+            int cycleInd = stepCount % 2;
 
-        return routeByMaps.size();
+            for (IntPair mapInd : new HashSet<>(routeByMaps.keySet())) {
+                int size = routeByMaps.get(mapInd).size();
+                if (size == cycle.evenCycle) {
+                    if (cycleCandidate.contains(mapInd)) {
+                        if (cycleCount != null) {
+                            cycleCount[cycleInd]++;
+                        }
+                        routeByMaps.remove(mapInd);
+                        blocked.add(mapInd);
+                        cycleCandidate.remove(mapInd);
+                    } else {
+                        cycleCandidate.add(mapInd);
+                    }
+                } else if (size == cycle.oddCycle) {
+                    if (cycleCandidate.contains(mapInd)) {
+                        if (cycleCount != null) {
+                            cycleCount[(cycleInd + 1) % 2]++;
+                        }
+                        routeByMaps.remove(mapInd);
+                        blocked.add(mapInd);
+                    } else {
+                        cycleCandidate.add(mapInd);
+                    }
+                }
+            }
+        }
+        return routeByMaps;
     }
 
-    private int[] findCycle() {
+    private CycleAndSteps findCycle() {
         Set<IntPair> route = new HashSet<>();
         route.add(startPosition);
         int stepCount = 0;
-        int[] cycle = new int[2];
+        int[][] cycle = new int[2][2];
         int countCycle = 0;
         while (!route.isEmpty() && countCycle < 2) {
             Set<IntPair> next = new HashSet<>();
@@ -93,79 +139,129 @@ public class StepCounter {
             }
             stepCount++;
             route = next;
-            if (cycle[stepCount % 2] == route.size()) {
+            int cycleInd = stepCount % 2;
+            if (cycle[0][cycleInd] == route.size()) {
                 countCycle++;
             } else {
-                cycle[stepCount % 2] = route.size();
+                cycle[0][cycleInd] = route.size();
+                cycle[1][cycleInd] = stepCount;
             }
         }
-        return cycle;
+        return new CycleAndSteps(cycle[0][0], cycle[0][1], cycle[1][0], cycle[1][1]);
     }
 
-
-    private void doStep4D(Set<Int4D> next, Int4D current) {
+    private void doStepInInfinityMap(Map<IntPair, Set<IntPair>> next, Set<IntPair> bannedMaps, IntPair mapInd, IntPair current) {
         int i = current.i();
         int j = current.j();
-        int mapI = current.mapI();
-        int mapJ = current.mapJ();
+        int mapI = mapInd.i();
+        int mapJ = mapInd.j();
         if (map[i][j] != '.') {
             return;
         }
-        int nextInd = i - 1;
-        int nextMap = mapI;
-        if (!MatrixUtils.isIndexInMatrix(map, nextInd, j)) {
-            nextInd += map.length;
-            nextMap--;
+        if (bannedMaps.contains(mapInd)) {
+            return;
         }
-        if (map[nextInd][j] == '.') {
-            next.add(new Int4D(nextInd, j, nextMap, mapJ));
-        }
-
-        nextInd = i + 1;
-        nextMap = mapI;
-        if (nextInd == map.length) {
-            nextInd = 0;
-            nextMap++;
-        }
-        if (map[nextInd][j] == '.') {
-            next.add(new Int4D(nextInd, j, nextMap, mapJ));
-        }
-
-        nextInd = j - 1;
-        nextMap = mapJ;
-        if (nextInd == -1) {
-            nextInd += map[0].length;
-            nextMap--;
-        }
-        if (map[i][nextInd] == '.') {
-            next.add(new Int4D(i, nextInd, mapI, nextMap));
-        }
-
-        nextInd = j + 1;
-        nextMap = mapI;
-        if (nextInd == map[0].length) {
-            nextInd = 0;
-            nextMap++;
-        }
-        if (map[i][nextInd] == '.') {
-            next.add(new Int4D(i, nextInd, mapI, nextMap));
+        for (int k = -1; k <= 1; k += 2) {
+            int nextI = i + k;
+            int nextMapI = mapI;
+            if (nextI == -1) {
+                nextI += map.length;
+                nextMapI--;
+            } else if (nextI == map.length) {
+                nextI = 0;
+                nextMapI++;
+            }
+            if (map[nextI][j] == '.') {
+                IntPair nextMap = new IntPair(nextMapI, mapJ);
+                if (!bannedMaps.contains(nextMap)) {
+                    next.computeIfAbsent(nextMap, __ -> new HashSet<>())
+                            .add(new IntPair(nextI, j));
+                }
+            }
+            int nextJ = j + k;
+            int nextMapJ = mapJ;
+            if (nextJ == -1) {
+                nextJ += map[0].length;
+                nextMapJ--;
+            } else if (nextJ == map[0].length) {
+                nextJ = 0;
+                nextMapJ++;
+            }
+            if (map[i][nextJ] == '.') {
+                IntPair nextMap = new IntPair(mapI, nextMapJ);
+                if (!bannedMaps.contains(nextMap)) {
+                    next.computeIfAbsent(nextMap, __ -> new HashSet<>())
+                            .add(new IntPair(i, nextJ));
+                }
+            }
         }
     }
 
+    public long countInfinityGardenPlotsInPerfectMap(int steps) {
+        CycleAndSteps cycleAndSteps = findCycle();
+        int stepSize = cycleAndSteps.evenSteps;
+
+        int stepCount = stepSize;
+        long borderSize = 0;
+        long[] cycleCount = new long[2];
+        cycleCount[0] = 1;
+        while ((stepCount + stepSize + 1) <= steps) {
+            borderSize++;
+            stepCount += stepSize + 1;
+            cycleCount[stepCount % 2] += borderSize * 4;
+        }
+        int cycleIndex = stepCount % 2;
+        int stepLimit;
+        int smallSteps;
+        if (cycleIndex == 1) {
+            stepLimit = (stepSize * 2 + 1) + (steps - stepCount);
+            smallSteps = 2;
+        } else {
+            stepLimit = (stepSize * 3 + 2) + (steps - stepCount);
+            smallSteps = 3;
+        }
+
+        Map<IntPair, Set<IntPair>> routeByMaps = fillRoutesMapAndCycles(cycleAndSteps, stepLimit, null);
+        long diagonalLayers[] = new long[2];
+        long corners = 0;
+        for (int scan = smallSteps - 1; scan <= smallSteps; scan++) {
+            int dI = scan - smallSteps + 1;
+            diagonalLayers[dI] += routeByMaps.getOrDefault(new IntPair(scan, 1), Collections.emptySet()).size();
+            diagonalLayers[dI] += routeByMaps.getOrDefault(new IntPair(scan, -1), Collections.emptySet()).size();
+            diagonalLayers[dI] += routeByMaps.getOrDefault(new IntPair(-scan, 1), Collections.emptySet()).size();
+            diagonalLayers[dI] += routeByMaps.getOrDefault(new IntPair(-scan, -1), Collections.emptySet()).size();
+
+            corners += routeByMaps.getOrDefault(new IntPair(scan + 1, 0), Collections.emptySet()).size();
+            corners += routeByMaps.getOrDefault(new IntPair(-scan - 1, 0), Collections.emptySet()).size();
+            corners += routeByMaps.getOrDefault(new IntPair(0, scan + 1), Collections.emptySet()).size();
+            corners += routeByMaps.getOrDefault(new IntPair(0, -scan - 1), Collections.emptySet()).size();
+        }
+        long diagonals = (borderSize * diagonalLayers[0]) + ((borderSize + 1) * diagonalLayers[1]);
+
+        long sum = 0;
+        if (stepCount % 2 == 0) {
+            sum += cycleCount[0] * cycleAndSteps.evenCycle + cycleCount[1] * cycleAndSteps.oddCycle;
+        } else {
+            sum += cycleCount[0] * cycleAndSteps.oddCycle + cycleCount[1] * cycleAndSteps.evenCycle;
+        }
+
+        sum += diagonals;
+        sum += corners;
+        return sum;
+    }
 
     public static void main(String[] args) {
-//        System.out.println("== TEST 1 ==");
-//        System.out.println(new StepCounter("day21/test.txt").countGardenPlotsForSteps(6));
-//        System.out.println("== SOLUTION 1 ==");
-//        System.out.println(new StepCounter("day21/input.txt").countGardenPlotsForSteps(64));
-
+        System.out.println("== TEST 1 ==");
+        System.out.println(new StepCounter("day21/test.txt").countGardenPlotsForSteps(6));
+        System.out.println("== SOLUTION 1 ==");
+        System.out.println(new StepCounter("day21/input.txt").countGardenPlotsForSteps(64));
 
         System.out.println("== TEST 2 ==");
-        System.out.println(new StepCounter("day21/test.txt").countInfinityGardenPlotsForSteps(5000));
+        System.out.println(new StepCounter("day21/test.txt").countInfinityGardenPlotsForSteps(1000));
         System.out.println("== SOLUTION 2 ==");
-        System.out.println(new StepCounter("day21/input.txt").countInfinityGardenPlotsForSteps(26501365));
+        System.out.println(new StepCounter("day21/input.txt").countInfinityGardenPlotsInPerfectMap(26501365));
     }
 
-    record Int4D(int i, int j, int mapI, int mapJ) {
+    private record CycleAndSteps(int evenCycle, int oddCycle, int evenSteps, int oddSteps) {
     }
 }
